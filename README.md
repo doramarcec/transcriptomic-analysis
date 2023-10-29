@@ -25,6 +25,45 @@ Fist step before starting the analysis is to install [conda](https://docs.conda.
 
 The latest version of both [FastQC](https://bioconda.github.io/recipes/fastqc/README.html) and [FastQ Screen](https://bioconda.github.io/recipes/fastq-screen/README.html?) can be installed using conda:
 ```
-conda install fastqc | conda install fastq-screen
+conda install fastqc
+conda install fastq-screen
 ```
+
+### RNA-strandedness
+
+Before moving onto the genome alignment step, I needed to figure out the RNA strandedness of my reads to make sure that I use the right strandedness setting when running HISAT2. To do this, I used a [custom python script](https://github.com/signalbash/how_are_we_stranded_here) and [kallisto](https://pachterlab.github.io/kallisto/manual).
+```
+pip install how_are_we_stranded_here
+wget https://ftp.ensembl.org/pub/release-108/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz
+kallisto index -i Homo_sapiens.GRCh38.cdna.all.release-94_k31.idx Homo_sapiens.GRCh38.cdna.all.fa.gz
+wget https://ftp.ensembl.org/pub/release-108/gtf/homo_sapiens/Homo_sapiens.GRCh38.108.gtf.gz
+gunzip Homo_sapiens.GRCh38.108.gtf.gz
+gunzip Homo_sapiens.GRCh38.cdna.all.fa.gz
+cd ..
+```
+GTF transcript annotation file, transcripts FASTA file, and FASTQ read files from one sample are needed to run the script.
+```
+check_strandedness --gtf kallisto/Homo_sapiens.GRCh38.108.gtf --transcripts kallisto/Homo_sapiens.GRCh38.cdna.all.fa --reads_1 data/untrimmed_fastq/LE2_6h_1.fq --reads_2 data/untrimmed_fastq/LE2_6h_2.fq -k kallisto/Homo_sapiens.GRCh38.cdna.all.release-94_k31.idx
+```
+
 ## Genome alignment
+
+HISAT2 is an alignment program which maps NGS reads (both RNA and DNA) to population of human genomes as well as to a single reference genome.
+
+The latest version of HISAT2 can be installed using [conda](https://bioconda.github.io/recipes/hisat2/README.html?):
+```
+conda install hisat2
+```
+
+To automate the genome alignment across all of my samples I used the *foor* loop as below:
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+hisat2 -p 20 -q --rna-strandness RF --dta -x HISAT2/grch38/genome -1 data/untrimmed_fastq/${infile}_1.fq -2 data/untrimmed_fastq/${infile}_2.fq -S results/4.2.aligned_dta/${infile}.aligned.sam | echo "Alignment for ${infile} has started."
+done
+```
+### SAMtools
+
+
+
+
