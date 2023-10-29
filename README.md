@@ -4,7 +4,7 @@ This was a 12-month research placement investigating the mechanisms of transcrip
 Required packages: FastQC, FastQ Screen, HISAT2, SAMtools, StringTie.
 
 **Overview**
-Step |Procedure | Outputs
+Step | Procedure | Outputs
 ------------ | ------------ | -------------
 1 | paired-end RNA-seq | *H. sapiens* FASTQ files
 2 | FastQC | N/A
@@ -19,3 +19,10 @@ Fist step before starting the analysis is to install [conda](https://docs.conda.
 
 ## Quality control
 
+[FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) is a quality control package which produces a sequence quality report, which is useful in determining whether or not your sequences need to be trimmed before the next step. 
+
+The latest version can be installed using [conda](https://bioconda.github.io/recipes/fastqc/README.html)
+```
+conda install fastqc
+```
+[FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/) is a package which allows you to screen your sequence library against a set of sequence databases to see the composition of your sequence library. This is an optional step but I did it out of curiosity, because the CD40 ligand (CD40L) used for receptor ligation in human carcinoma cells, was membrane-bound on a murine fibroblast.
