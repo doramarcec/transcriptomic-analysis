@@ -21,8 +21,10 @@ Fist step before starting the analysis is to install [conda](https://docs.conda.
 
 [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) is a quality control package which produces a sequence quality report, which is useful in determining whether or not your sequences need to be trimmed before the next step. 
 
-The latest version can be installed using [conda](https://bioconda.github.io/recipes/fastqc/README.html)
+[FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/) is a package which allows you to screen your sequence library against a set of sequence databases to see the composition of your sequence library. This is an optional step but I did it out of curiosity, because the CD40 ligand (CD40L) used for receptor ligation in human carcinoma cells, was membrane-bound on a murine fibroblast, so it was expected that there would be a mixture of murine and human genome in the sequenced reads. 
+
+The latest version of both [FastQC](https://bioconda.github.io/recipes/fastqc/README.html) and [FastQ Screen](https://bioconda.github.io/recipes/fastq-screen/README.html?) can be installed using conda:
 ```
-conda install fastqc
+conda install fastqc | conda install fastq-screen
 ```
-[FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/) is a package which allows you to screen your sequence library against a set of sequence databases to see the composition of your sequence library. This is an optional step but I did it out of curiosity, because the CD40 ligand (CD40L) used for receptor ligation in human carcinoma cells, was membrane-bound on a murine fibroblast.
+## Genome alignment
