@@ -62,6 +62,21 @@ do
 hisat2 -p 20 -q --rna-strandness RF --dta -x HISAT2/grch38/genome -1 data/untrimmed_fastq/${infile}_1.fq -2 data/untrimmed_fastq/${infile}_2.fq -S results/4.2.aligned_dta/${infile}.aligned.sam | echo "Alignment for ${infile} has started."
 done
 ```
+
+**Explanation of used settings**
+Argument | Explanation
+--- | ---
+-p | Used for performance tuning - if the computer has multiple processors/cores, -p instructs HISAT2 on how many to use.
+-q | Specifies that the input reads are FASTQ files.
+--RNA-strandedness | Takes strand-specific information, e.g. unstranded (the default), F (forward-stranded) or R (reverse-stranded) single-end reads, RF (reverse-stranded) or FR (direct-stranded) paired-end reads.
+--dta / --downstream-transcriptome-assembly | Reports alignments tailored for transcript assemblers such as StringTie.
+-x | The path to and the basename of the reference genome indices.
+-1 | Files containing mate 1s (filename usually includes _1). If FR, this will be the reads from the sense (forward) strand. If RF, this will be reads from the antisense (reverse) strand.
+-2 | Files containing mate 2s (filename usually includes _2). If FR, this will be the reads from the antisense (reverse) strand. If RF, this will be reads from the sense (forward) strand.
+-S | Path to and the basename of the output SAM alignment file. 
+
+Find out more in the [HISAT2 manual.](https://daehwankimlab.github.io/hisat2/manual/) 
+
 ### SAMtools
 
 
