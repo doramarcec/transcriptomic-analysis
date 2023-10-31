@@ -74,7 +74,7 @@ done
 **Explanation of used settings**
 Argument | Explanation
 --- | ---
--p | Used for performance tuning - if the computer has multiple processors/cores, -p instructs HISAT2 on how many to use.
+-p | Used for performance tuning - if the computer has multiple CPUs, -p specifies how many to use.
 -q | Specifies that the input reads are FASTQ files.
 --RNA-strandedness | Takes strand-specific information, e.g. unstranded (the default), F (forward-stranded) or R (reverse-stranded) single-end reads, RF (reverse-stranded) or FR (direct-stranded) paired-end reads.
 --dta / --downstream-transcriptome-assembly | Reports alignments tailored for transcript assemblers such as StringTie.
@@ -140,9 +140,51 @@ done
 
 ## Transcript assembly
 
+StringTie is a transcript assembler and quantification tool for RNA-seq alignments. It is compatible with the HISAT2 output, and its' output is compatible with DESeq2, used in the next step, making it ideal for my workflow. 
+
+**Assembling the reads**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+stringtie -p 20 --rf -o results/6.assembled/${infile}.assembled.gtf -G kallisto/Homo_sapiens.GRCh38.108.gtf results/5.2.processed_aligned_dta/${infile}.chr_singleton_removed.sorted.bam
+done
+```
+
+**Merging the reads**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+stringtie --merge -G kallisto/Homo_sapiens.GRCh38.108.gtf -o results/6.assembled/merged.gtf results/6.assembled/${infile}.assembled.gtf
+done
+```
+
+**Using a [perl script](https://gist.github.com/gpertea/b83f1b32435e166afa92a2d388527f4b) to add gene IDs to MSTRG gene names from the output**
+```
+chmod 777 mstrg_prep.pl # permission to execute the script
+mstrg_prep.pl results/6.assembled/merged.gtf > results/6.assembled/merged_prep.gtf
+```
+
+**Estimation of transcript abundances**
+```
+for infile in LE1 LE2 NE1 NE2
+do
+stringtie -e -B -G results/6.assembled/merged_prep.gtf -o results/7.expression_estimation/${infile}.re-estimated_prep.gtf results/5.2.processed_aligned_dta/${infile}_6h.chr_singleton_removed.sorted.bam
+done
+```
+
+**Explanation of used settings**
+Argument | Explanation
+--- | ---
+-p | Used for performance tuning - if the computer has multiple CPUs, -p specifies how many to use.
+--rf | Specifies RF RNA-strandedness.
+-o | Output path and basename.
+-G | Reference genome annotation file.
+--merge | Transcript merge mode. 
+-e | Instructs StringTie to operate in expression estimation mode. Used in combination with -G and the output includes the expressed reference transcripts as well as any novel transcripts that were assembled in the GTF file format.
+-B | Outputs CTAB file for Ballgown input (was not necessary in the end).
 
 
-
+Finally, to generate read counts in the CSV file format from the estimated transcript abundances, [prepDE.py](https://github.com/gpertea/stringtie/blob/master/prepDE.py) script was used. 
 
 
 
