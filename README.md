@@ -183,6 +183,7 @@ Argument | Explanation
 -e | Instructs StringTie to operate in expression estimation mode. Used in combination with -G and the output includes the expressed reference transcripts as well as any novel transcripts that were assembled in the GTF file format.
 -B | Outputs CTAB file for Ballgown input (was not necessary in the end).
 
+More information can be found in the [StringTie manual](https://ccb.jhu.edu/software/stringtie/index.shtml?t=manual).
 
 Finally, to generate read counts in the CSV file format from the estimated transcript abundances, [prepDE.py](https://github.com/gpertea/stringtie/blob/master/prepDE.py) script was used. 
 
