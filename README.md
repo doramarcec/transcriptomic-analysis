@@ -21,7 +21,15 @@ Fist step before starting the analysis is to install [conda](https://docs.conda.
 
 [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) is a quality control package which produces a sequence quality report, which is useful in determining whether or not your sequences need to be trimmed before the next step. 
 
-[FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/) is a package which allows you to screen your sequence library against a set of sequence databases to see the composition of your sequence library. This is an optional step but I did it out of curiosity, because the CD40 ligand (CD40L) used for receptor ligation in human carcinoma cells, was membrane-bound on a murine fibroblast, so it was expected that there would be a mixture of murine and human genome in the sequenced reads. 
+```
+fastqc data/untrimmed_fastq/*.fq -o results/untrimmed_fastqc
+```
+
+[FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/) is a package which allows you to screen your sequence library against a set of sequence databases to see the composition of your sequence library. This is an optional step but I did it out of curiosity, because the CD40 ligand (CD40L) was presented to the CD40 receptor, in human carcinoma cells, in a membrane bound form on a murine fibroblast, so it was expected that there would be a mixture of murine and human genome in the sequenced reads (there was a 50:50 mixture due to a co-culture). 
+
+```
+fastq_screen ~/analysis/data/untrimmed_fastq/*.fq.gz
+```
 
 The latest version of both [FastQC](https://bioconda.github.io/recipes/fastqc/README.html) and [FastQ Screen](https://bioconda.github.io/recipes/fastq-screen/README.html?) can be installed using conda:
 ```
@@ -77,7 +85,63 @@ Argument | Explanation
 
 Find out more in the [HISAT2 manual.](https://daehwankimlab.github.io/hisat2/manual/) 
 
-### SAMtools
+### Post-alignment processing
+
+Post-alignment processing involved sorting the aligned reads by their genomic location, and (if needed) converting the file to a BAM format, which contains binary, compressed version of the SAM files, accounting for a better storage format and faster processing. To do this, I used SAMtools, a program commonly used to manipulate aligned reads in the SAM, BAM, or CRAM formats. 
+
+**SAM to BAM conversion**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+samtools view -S -b ~/analysis/results/5.2.processed_aligned_dta/${infile}.aligned.sam > ~/analysis/results/5.2.processed_aligned_dta/${infile}.aligned.bam
+done
+```
+
+Before sorting the BAM files and moving onto transcript assembly, I needed to make sure that all of the murine genome is removed, and I did that by removing singletons and reads with a mate mapped to a different chromosome.
+
+**Removal of reads with a mate mapped to a different chromosome**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+samtools view -H ${infile}.aligned.bam > ${infile}.aligned.sam
+samtools view ${infile}.aligned.bam | awk '$7 == "=" {print}' >> ${infile}.aligned.sam
+samtools view -bS ${infile}.aligned.sam > ${infile}.chr_removed.bam
+samtools flagstat ${infile}.chr_removed.bam
+done
+```
+
+**Singleton removal**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+samtools view -@ 8 -F 0x08 -b ${infile}.aligned.sam > ${infile}.chr_singleton_removed.bam
+samtools flagstat ${infile}.chr_singleton_removed.bam
+done
+```
+
+**Sorting BAM files**
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+samtools sort -o ${infile}.chr_singleton_removed.sorted.bam ${infile}.chr_singleton_removed.bam
+done
+```
+
+Detailed instructions and explanations of used settings can be found in [SAMtools manual](http://www.htslib.org/doc/samtools.html).
+
+Before moving onto transcript assembly, I re-run FastQ Screen to check if all of the murine genome was removed.
+```
+for infile in LE1_6h LE2_6h NE1_6h NE2_6h
+do
+samtools bam2fq ${infile}.chr_singleton_removed.sorted.bam > ${infile}.chr_singleton_removed.sorted.fq
+fastq_screen ${infile}.chr_singleton_removed.sorted.fq
+done
+```
+
+## Transcript assembly
+
+
+
 
 
 
