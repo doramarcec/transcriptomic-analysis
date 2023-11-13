@@ -185,7 +185,295 @@ Argument | Explanation
 
 More information can be found in the [StringTie manual](https://ccb.jhu.edu/software/stringtie/index.shtml?t=manual).
 
-Finally, to generate read counts in the CSV file format from the estimated transcript abundances, [prepDE.py](https://github.com/gpertea/stringtie/blob/master/prepDE.py) script was used. 
+Finally, to generate read counts in the CSV file format from the estimated transcript abundances, [prepDE.py](https://github.com/gpertea/stringtie/blob/master/prepDE.py) script was used, and generated read count matrix was exported as a CSV file and imported into R. 
 
+## Differential gene expression analysis in R
 
+Before importing the read count matrix and the metadata, required packages were installed and loaded from the library:
+
+```
+install.packages(c("tidyverse", "here", "dplyr"))
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(c("DESeq2", "Glimma"))
+```
+Data import, tidying and the analysis itself were performed following the [Analyzing RNA-seq data with DESeq2](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html) vignette by the respective authors of the DESeq2 package.
+
+In order for DESeq2 to be able to perform the differential expression analysis, gene count matrix file has to be accompanied by the file containing metadata. Moreover, the data needs to be tidied and the row names in the metadata file (colData) need to match the column names in the gene count matrix (gene_counts).
+
+```
+gene_counts <- read.csv(here("data", "gene_count_matrix.csv"))
+colData <- read.csv(here("data", "sample_info.csv"))
+
+# Are the row names in colData matching the column names in gene_counts?
+all(rownames(colData) %in% colnames(gene_counts)) # FALSE
+
+gene_counts <- column_to_rownames(gene_counts, var = "gene_id")
+gene_counts
+
+colData <- column_to_rownames(colData, var = "sample_id")
+colData
+
+all(rownames(colData) %in% colnames(gene_counts)) #TRUE
+
+# Are the row names in colData and column names in gene_counts in the same order?
+all(rownames(colData) == colnames(gene_counts)) #TRUE
+```
+
+After the data is tidied, a DESeqDataSet is created from the count matrix:
+
+```
+dds <- DESeqDataSetFromMatrix(countData = gene_counts, colData = colData, design = ~ treatment)
+dds
+```
+
+As I have used StringTie for transcript abundance estimation, the gene names in my dataset involved MSTRG IDs, which were removed, along with the duplicate genes names.
+
+```
+# Remove MSTRG IDs from rownames
+newrownames <- str_replace(rownames(dds), "MSTRG\\.[0-9]+\\|", "")
+rownames(dds) <- newrownames
+
+# Remove duplicate gene names and symbols from rownames
+newrownames2 <- str_replace(rownames(dds), "[|].*", "")
+rownames(dds) <- newrownames2
+```
+
+Now that I've tidied up my rownames, I removed rows with low gene counts (< 10) across all the samples, and set the factor level, which is essentially a "reference" level against which the expression in treated samples is going to be compared.
+
+```
+# Pre-filter to remove rows with low gene counts across all the samples
+keep <- rowSums(counts(dds)) >= 10 # keeps only rows that have at least 10 reads total
+dds <- dds[keep,]
+dds
+
+# Set the factor level
+# Use control as a reference level to compare against the treated
+dds$treatment <- relevel(dds$treatment, ref = "control")
+```
+
+After this, the data is ready and the differential expression analysis can be performed by DESeq2:
+
+```
+dds <- DESeq(dds)
+res <- results(dds)
+res
+```
+
+I filtered the results to the genes that had a p adjusted value < 0.01 and a log2 fold change in the expression levels > 2, in either direction. 
+
+```
+# Filtering of the results
+sig_res <- res_df %>%
+  dplyr::filter(padj < 0.01) %>%
+  dplyr::filter(log2FoldChange > 2 | log2FoldChange < -2)
+
+# Results tables
+res_df <- as.data.frame(res)
+sig_res_df <- as.data.frame(sig_res)
+```
+
+The exploratory analysis as well as all the visualisations I did can be found in the RNA-seq-analysis-workflow.Rmd file, but as visualisation is my favourite part of any type of data analysis, here are some of my highlights :)
+
+**plotCounts for genes of interest**
+```
+# CD40
+# Find the Ensembl Id of CD40
+grch38[grch38$symbol == "CD40", "ensgene"] # ENSG00000101017
+# Plot CD40 expression
+plotCounts(dds, gene = "ENSG00000101017", intgroup = "treatment", main = "CD40")
+
+# CD40L
+# Find the Ensembl Id of CD40L
+grch38[grch38$symbol == "CD40LG", "ensgene"] # ENSG00000102245
+# Plot CD40L expression
+plotCounts(dds, gene = "ENSG00000102245", intgroup = "treatment", main = "CD40L")
+```
+
+**PCA plot**
+```
+plotPCA(vsd, "treatment") + theme(
+  panel.background = element_rect(fill = "white", colour = "grey50"), 
+  panel.border = element_rect(linetype = "solid", fill = NA, colour = "grey50"),
+  axis.ticks = element_line(colour = "grey50"))
+```
+
+**Volcano plot with labels of top 10 significantly DE genes**
+```
+# Additional packages required to execute the code below
+library(annotables)
+library(ggrepel)
+library(cowplot)
+
+# Label top 10 genes (lowest padj) on this plot
+# Add all gene symbols as a column from grch38
+res_table1 <- bind_cols(res_table1, symbol=grch38$symbol[match(res_table1$gene, grch38$ensgene)])
+
+# Create an empty column to indicate which genes to label
+res_table1 <- res_table1 %>% mutate(genelabels = "")
+
+# Sort by padj
+res_table1 <- res_table1 %>% arrange(padj)
+
+# Populate the genelabels column with contents of the gene symbols column for the first 10 rows (top 10 most significantly dif expressed genes)
+res_table1$genelabels[1:10] <- as.character(res_table1$symbol[1:10])
+res_table1
+
+ggplot(res_table1) + 
+  geom_point(aes(x = log2FoldChange, y = -log10(padj), colour = threshold)) + 
+  geom_text_repel(aes(x = log2FoldChange, y = -log10(padj), label = genelabels)) +
+  ggtitle("Gene expression following CD40 ligation") +
+  xlab("log2 fold change") +
+  ylab("-log10 adjusted p-value") + theme(
+  panel.background = element_rect(fill = "white", colour = "grey80"), 
+  panel.border = element_rect(linetype = "solid", fill = NA, colour = "grey80"),
+  axis.ticks = element_line(colour = "grey80"),
+  axis.title = element_text(size = rel(1.15)),
+  axis.text = element_text(size = rel(1.05)),
+  plot.title = element_text(size = rel(1.5), hjust = 0.5),
+  legend.position = "top",
+  legend.key = element_rect(fill = "white", color = NA),
+  legend.title = element_blank()) +
+  scale_color_manual(values = c("#1c9e77", "#d95f02"), na.translate = F)
+```
+
+Before moving onto the functional analyses, the DE results have to be sorted as below:
+
+```
+# Sort out the DE results for Functional Analysis
+
+# Return the IDs for the gene symbols in the DE results
+idx <- grch38$ensgene %in% rownames(res_df)
+ids <- grch38[idx, ]
+
+# Remove duplicate IDs
+non_duplicates <- which(duplicated(ids$ensgene) == FALSE)
+ids <- ids[non_duplicates, ]
+
+# Merge the IDs with the results
+res_ids <- inner_join(res_table, ids, by=c("gene"="ensgene")) 
+
+# Repeat the above steps for significant genes
+a <- grch38$ensgene %in% rownames(sig_res_df)
+b <- grch38[a, ]
+non_duplicates2 <- which(duplicated(b$ensgene) == FALSE)
+b <- b[non_duplicates2, ]
+sig_res_ids <- inner_join(sig_res_table, b, by=c("gene"="ensgene"))
+
+sig_res_ids %>%
+  arrange(padj)
+
+# Create a background dataset for hypergeometric testing using all genes tested for significance in the results
+all_genes <- as.character(res_ids$gene)
+
+# Significant results
+sig_genes <- as.character(sig_res_ids$gene)
+```
+
+## Functional profiling in R
+
+For functional profiling, I performed the GO enrichment analysis, KEGG pathway annotation and Gene Set Enrichment Analysis (GSEA). The required packages are outlined below:
+
+```
+library(tidyverse)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(DOSE)
+library(pathview)
+library(AnnotationHub)
+library(ensembldb)
+```
+
+**GO enrichment**
+```
+## Biological processes
+ego <- enrichGO(gene = sig_genes,
+                universe = all_genes, 
+                keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db,
+                ont = "BP",
+                pAdjustMethod = "BH",
+                qvalueCutoff = 0.05,
+                readable = TRUE)
+
+BP <- data.frame(ego) %>%
+  dplyr::filter(p.adjust < 0.01)
+write.csv(BP, here("output/GO/biological_processes.csv"))
+```
+
+This is the code exerpt from the GO enrichment to obtain the enriched biological processes, but the same applies for molecular functions and cellular components, only the "BP" in *ont* parameter has to be changed to "MF" or "CC".
+
+For the KEGG and GSEA analyses, the data had to be slightly manipulated, as below.
+```
+# Remove NAs
+res_entrez <- sig_res_ids %>%
+  dplyr::filter(entrez != "NA")
+
+# Remove Entrez duplicates
+res_entrez <- res_entrez[which(duplicated(res_entrez$entrez) == F), ]
+
+# Extract the fold changes
+l2f <- res_entrez$log2FoldChange
+
+# Name each fold change with the corresponding Entrez ID
+names(l2f) <- res_entrez$entrez
+
+# Sort fold changes in descending order
+l2f <- sort(l2f, decreasing = TRUE)
+head(l2f)
+```
+
+**GSEA and KEGG pathway annotation**
+```
+# GSEA using gene sets from KEGG pathways
+set.seed(123456) # this is to use the same permutations every time below code is run
+gseaKEGG <- gseKEGG(geneList = l2f, 
+                     organism = "hsa", 
+                     nPerm = 1000, 
+                     minGSSize = 20, 
+                     pvalueCutoff = 0.05,
+                     verbose = FALSE)
+
+# Extract the GSEA results
+gseaKEGG_results <- gseaKEGG@result
+gseaKEGG_results <- setReadable(gseaKEGG, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+
+# Save results to csv file
+view(gseaKEGG_results)
+write.csv(gseaKEGG_results, here("output/KEGG/GSEA_KEGG_results.csv"), quote=F)
+
+# Output images for a single significant KEGG pathway
+detach("package:dplyr", unload=TRUE) # first unload dplyr to avoid conflicts
+pathview(gene.data = l2f,
+         pathway.id = "hsa04657",
+         species = "hsa",
+         limit = list(gene = 2, # value gives the max/min limit for fold changes
+                      cpd = 1))
+
+# Output image for all significant pathways
+kegg_plots <- function(x) {
+  pathview(gene.data = l2f, pathway.id = gseaKEGG_results$ID[x], species = "hsa", limit = list(gene = 2, cpd = 1))
+}
+purrr::map(1:length(gseaKEGG_results$ID), kegg_plots)
+```
+
+**GSEA plots**
+
+When it comes to visualising the enriched gene sets, each gene set can be plotted invididually, like in 1) and 2), or together with the other gene sets in a single plot, like in 3). 
+
+```
+# 1)
+gseaplot(gseaKEGG, geneSetID = 'hsa04060', title = gseaKEGG$Description[1])
+gseaplot(gseaKEGG, geneSetID = 'hsa04668', title = gseaKEGG$Description[2])
+gseaplot(gseaKEGG, geneSetID = 'hsa04064', title = gseaKEGG$Description[3])
+
+# 2)
+gseaplot2(gseaKEGG, geneSetID = 'hsa04060', title = gseaKEGG$Description[1])
+gseaplot2(gseaKEGG, geneSetID = 'hsa04668', title = gseaKEGG$Description[2])
+gseaplot2(gseaKEGG, geneSetID = 'hsa04064', title = gseaKEGG$Description[3])
+
+# 3)
+gp1 <- gseaplot2(gseaKEGG, geneSetID = 1:3)
+ggsave(here("output/Combined_GSEA_plot1.png"), width = 12, height = 10)
+```
 
