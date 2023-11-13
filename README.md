@@ -461,7 +461,7 @@ purrr::map(1:length(gseaKEGG_results$ID), kegg_plots)
 
 When it comes to visualising the enriched gene sets, each gene set can be plotted invididually, like in 1) and 2), or together with the other gene sets in a single plot, like in 3). 
 
-```{r}
+```
 # 1)
 gseaplot(gseaKEGG, geneSetID = 'hsa04060', title = gseaKEGG$Description[1])
 gseaplot(gseaKEGG, geneSetID = 'hsa04668', title = gseaKEGG$Description[2])
