@@ -13,4 +13,8 @@ output/KEGG/
 output/GO/
 output/*.png
 code/*.png
+<<<<<<< HEAD
 code/*.nb.html
+=======
+code/*.html
+>>>>>>> d7e26f6 (File organisation update)
