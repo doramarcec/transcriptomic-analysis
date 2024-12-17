@@ -1,0 +1,45 @@
+---
+title: "Differential gene expression analysis using Ballgown"
+output: html_notebook
+---
+
+Starting with the new counts because the previous ones were merged separately for LE and NE samples.
+```{r}
+rm(list = ls()) # empties the global environment
+```
+
+```{r}
+install.packages('ballgown')
+install.packages('RColorBrewer')
+install.packages('genefilter')
+install.packages('dplyr')
+install.packages('devtools')
+```
+
+
+```{r}
+library("tidyverse")
+library("here")
+library("ballgown") #for differential expression analysis
+library("RColorBrewer") #or RSkittleBrewer for plot coloring
+library("genefilter") #calc of means and variances
+library("dplyr") #sort and arrange results
+library("devtools") #to ensure reproducibility and install relevant packages
+```
+
+
+```{r}
+# Import read counts
+gene_counts <- read.csv(here("data", "gene_count_matrix.csv"))
+transcript_counts <- read.csv(here("data", "transcript_count_matrix.csv"))
+colData <- read.csv(here("data", "sample_info.csv"))
+
+gene_counts
+transcript_counts
+colData
+```
+
+```{r}
+
+```
+

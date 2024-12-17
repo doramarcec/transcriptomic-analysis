@@ -1,0 +1,44 @@
+---
+title: "Differential gene expression analysis using DESeq2"
+output: html_notebook
+---
+
+```{r}
+install.packages(c("tidyverse", "here"))
+
+# Install Bioconductor
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.16")
+
+# Install DESeq2 package
+BiocManager::install(c("DESeq2"))
+```
+
+```{r}
+# Import package libraries
+library("tidyverse")
+library("here")
+library("DESeq2")
+
+here()
+```
+
+```{r}
+# Import gene counts
+LE_gene_counts <- read.csv(here("data", "LE_gene_count_matrix.csv"))
+LE_transcript_counts <- read.csv(here("data", "LE_transcript_count_matrix.csv"))
+NE_gene_counts <- read.csv(here("data", "NE_gene_count_matrix.csv"))
+NE_transcript_counts <- read.csv(here("data", "NE_transcript_count_matrix.csv"))
+
+# These counts were wrong because they were made separately for LE and NE instead of all together. 
+```
+```{r}
+# Import gene counts (good ones!)
+gene_counts <- read.csv(here("data", "gene_count_matrix.csv"))
+transcript_counts <- read.csv(here("data", "transcript_count_matrix.csv"))
+colData <- read.csv(here("data", "sample_info.csv"))
+```
+
+
+

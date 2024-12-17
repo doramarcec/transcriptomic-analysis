@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+if (!require("devtools")) install.packages("devtools")
+devtools::install_github("price0416/DEvis/DEVis")
+library("DEVis")
+library("tidyverse")
+library("here")
+library("DESeq2")
+```
+
+```{r} 
+ResList <- list(res)
+set_output_mode(toggle = "both")
+create_dir_struct(base_dir = here("output"))
+init_cutoffs(p_signif = 0.1, lfc_cut = 1)
+create_master_res(res_list, filename = "master_DE.txt", method = "union", lfc_filter = FALSE)
+
+de_counts(res_list = ResList, filename = "de_count_barplot.pdf", customLabels = FALSE, theme = 1, returnData = FALSE)
+
+de_density_plot(res_list = ResList, filename = "de_density_plot.pdf", type = "pval", method = "union", returnData = FALSE)
+
+#visualise fold-change divergence for differentially expressed genes
+de_diverge_plot(res_list = ResList, filename = "de_divergence_plot.pdf", theme = 1, customLabels = FALSE, returnData = FALSE)
+
+# Generate a heat map of the top 100 most upregulated genes based on condition.
+# Gene-wise max value based calculation
+de_heat(res_list = ResList, filename = "heatmap.pdf", anno_columns = "Condition", sort_choice = "max", numGenes = 100, theme = 2, returnData = FALSE)
+```

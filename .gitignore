@@ -1,0 +1,15 @@
+*.RData
+*.png
+*.docx
+*.Rhistory 
+*.Rproj*
+*.pptx 
+*.pdf
+*.mp4
+data/*.gmt
+data/*.csv
+output/DE/
+output/KEGG/
+output/GO/
+output/*.png
+code/*.png
