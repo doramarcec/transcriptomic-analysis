@@ -1,0 +1,194 @@
+---
+title: "WGCNA"
+output: html_notebook
+---
+
+```{r}
+install.packages("tidyverse")
+install.packages("WGCNA")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("DESeq2")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("GEOquery")
+
+install.packages("CorLevelPlot")
+install.packages("gridExtra")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("GOSemSim")
+BiocManager::install("GO.db")
+
+remove.packages("rlang")
+install.packages("rlang")
+library(rlang)
+
+BiocManager::install("AnnotationHub")
+BiocManager::install("preprocessCore")
+BiocManager::install("DOSE")
+```
+
+```{r}
+library(WGCNA)
+library(DESeq2)
+library(GEOquery)
+library(tidyverse)
+# library(CorLevelPlot)
+library(gridExtra)
+```
+
+```{r}
+# the data
+wgcna_data <- gene_counts
+
+# metadata
+phenoData <- colData
+phenoData <- rownames_to_column(phenoData, var = "sample_id")
+
+# tidying the data
+wgcna_data <- rownames_to_column(wgcna_data, var = "gene_id")
+
+wgcna_data <- wgcna_data %>%
+  mutate(gene_id = gsub('MSTRG\\.[0-9]+\\|', '', gene_id)) %>%
+  mutate(gene_id = gsub('[|].*', '', gene_id)) %>%
+  distinct(gene_id, .keep_all = TRUE) %>% # removes all duplicate rows in the gene_id column
+  column_to_rownames(var = "gene_id")
+```
+
+```{r}
+# quality control
+
+gsg <- goodSamplesGenes(t(wgcna_data))
+summary(gsg)
+gsg$allOK # FALSE -> indicates there are outliers
+
+table(gsg$goodGenes) # 33196 genes are recognised as outliers
+table(gsg$goodSamples) # all the samples are good to go
+
+# remove outlier genes
+wgcna_data <- wgcna_data[gsg$goodGenes == TRUE, ]
+
+## detect outlier samples via hierarchical clustering - method 1
+htree <- hclust(dist(t(wgcna_data)), method = "average")
+plot(htree)
+
+## pca
+pca <- prcomp(t(wgcna_data))
+pca.data <- pca$x
+
+pca.var <- pca$sdev^2
+pca.var.percent <- round(pca.var/sum(pca.var)*100, digits = 2)
+
+pca.data <- as.data.frame(pca.data)
+
+ggplot(pca.data, aes(PC1, PC2)) + geom_point() + geom_text(label = rownames(pca.data)) + labs(x = paste0('PC1: ', pca.var.percent[1], ' %'), y = paste0('PC2: ', pca.var.percent[2], ' %')) # NE2 sample deviates quite far from the rest 
+
+samples.to.be.excluded <- c('NE2', 'LE2')
+data.subset <- wgcna_data[,!(colnames(wgcna_data) %in% samples.to.be.excluded)]
+```
+
+```{r}
+# normalization: creating a deseq2 dataset
+
+phenoData <- phenoData %>%
+  filter(!row.names(.) %in% samples.to.be.excluded)
+
+phenoData <- phenoData %>%
+  column_to_rownames(var = "sample_id")
+
+all(rownames(phenoData) %in% colnames(data.subset)) #TRUE
+all(rownames(phenoData) == colnames(data.subset)) # TRUE
+
+# create dds
+dds.wgcna <- DESeqDataSetFromMatrix(countData = data.subset,
+                                    colData = phenoData, 
+                                    design = ~ 1) # not specifying model
+
+# remove all genes with counts < 15 in more than 75% of samples
+dds75 <- data.subset[rowSums(counts(dds) >= 15) >= 3, ]
+nrow(dds75) # 18464
+
+# cannot do the below steps because there is only 1 sample in each group
+
+# perform varience stabilization
+# dds_norm <- DESeq2::vst(dds75)
+
+# get normalized counts
+# norm.counts <- assay(dds_norm) %>%
+#  t()
+
+```
+
+```{r}
+# network construction
+
+## chose soft-thresholding powers
+power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
+
+## call the network topology analysis function
+sft <- pickSoftThreshold(norm.counts, 
+                         powerVector = power,
+                         networkType = "signed",
+                         verbose = 5)
+
+sft.data <- sft$fitIndices
+
+# visualize the metrics to pick the power
+
+a1 <- ggplot(sft.data, aes(Power, SFT.R.sq, label = Power)) +
+  geom_point() +
+  geom_text(nudge_y = 0.1) +
+  geom_hline(yintercept = 0.695544988, color = 'red') +
+  labs(x = 'Power', y = 'Scale free topology model fit, signed R^2') +
+  theme_classic()
+
+a2 <- ggplot(sft.data, aes(Power, mean.k., label = Power)) +
+  geom_point() +
+  geom_text(nudge_y = 0.1) +
+  labs(x = 'Power', y = 'Mean Connectivity') +
+  theme_classic()
+  
+grid.arrange(a1, a2, nrow = 2) # picking 48 (above the threshold but lower mean connectivity than 46)
+```
+
+```{r}
+# convert matrix to numeric
+norm.counts[] <- sapply(norm.counts, as.numeric)
+soft_power <- 48
+
+# assign the correlation function to a temp variable, in order for WGCNA to use cor from its package
+temp_cor <- cor
+cor <- WGCNA::cor
+```
+
+```{r}
+# memory estimate w.r.t blocksize
+bwnet <- blockwiseModules(norm.counts,
+                 maxBlockSize = 10000,
+                 TOMType = "signed",
+                 power = soft_power,
+                 mergeCutHeight = 0.25,
+                 numericLabels = FALSE,
+                 randomSeed = 1234,
+                 verbose = 3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

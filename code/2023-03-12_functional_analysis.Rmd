@@ -1,0 +1,299 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("clusterProfiler")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("org.Hs.eg.db")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("DOSE")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("pathview")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("AnnotationHub")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("ensembldb")
+
+install.packages("dplyr")
+
+install.packages("devtools")
+devtools::install_github("stephenturner/annotables")
+
+#BiocManager::valid()
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("GSEABase")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("SPIA")
+```
+
+```{r}
+library(tidyverse)
+library(org.Hs.eg.db)
+library(DOSE)
+library(pathview)
+library(clusterProfiler)
+library(AnnotationHub)
+library(ensembldb)
+library(annotables)
+```
+
+```{r}
+grch38
+
+# Return the IDs for the gene symbols in the DE results
+idx <- grch38$ensgene %in% rownames(res_df)
+ids <- grch38[idx, ]
+
+# Remove duplicate IDs
+non_duplicates <- which(duplicated(ids$ensgene) == FALSE)
+ids <- ids[non_duplicates, ]
+
+# Merge the IDs with the results
+res_table <- rownames_to_column(res_df, var = "gene")
+res_ids <- inner_join(res_table, ids, by=c("gene"="ensgene")) 
+
+# Repeat the above steps for significant genes
+a <- grch38$ensgene %in% rownames(sig_res_df)
+b <- grch38[a, ]
+non_duplicates2 <- which(duplicated(b$ensgene) == FALSE)
+b <- b[non_duplicates2, ]
+sig_res_table <- rownames_to_column(sig_res_df, var = "gene")
+sig_res_ids <- inner_join(sig_res_table, b, by=c("gene"="ensgene"))
+
+# Create a background dataset for hypergeometric testing using all genes tested for significance in the results
+all_genes <- as.character(res_ids$gene)
+
+# Significant results
+sig_genes <- as.character(sig_res_ids$gene)
+```
+
+```{r}
+# GO enrichment
+
+## Biological processes
+ego <- enrichGO(gene = sig_genes,
+                universe = all_genes, 
+                keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db,
+                ont = "BP",
+                pAdjustMethod = "BH",
+                qvalueCutoff = 0.05,
+                readable = TRUE)
+
+BP <- data.frame(ego)
+write.csv(BP, here("output/biological_processes.csv"))
+
+## Molecular functions
+ego1 <- enrichGO(gene = sig_genes,
+                universe = all_genes, 
+                keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db,
+                ont = "MF",
+                pAdjustMethod = "BH",
+                qvalueCutoff = 0.05,
+                readable = TRUE)
+
+MF <- data.frame(ego1)
+write.csv(MF, here("output/molecular_functions.csv"))
+
+## Cellular components
+ego2 <- enrichGO(gene = sig_genes,
+                universe = all_genes, 
+                keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db,
+                ont = "CC",
+                pAdjustMethod = "BH",
+                qvalueCutoff = 0.05,
+                readable = TRUE)
+
+CC <- data.frame(ego2)
+write.csv(CC, here("output/cellular_components.csv"))
+```
+
+```{r}
+# Dotplots
+
+dotplot(ego, showCategory=30)
+dotplot(ego1)
+dotplot(ego2)
+```
+
+```{r}
+# Enrichment GO plots
+library(enrichplot)
+
+pairwise_termsim(ego)
+pairwise_termsim(ego1)
+pairwise_termsim(ego2)
+
+emapplot(ego, showCategory = 50)
+emapplot(ego1)
+emapplot(ego2)
+```
+
+```{r}
+# Category netplots
+
+# To colour the genes by log2Fold changes, log2Fold change column needs to be extracted from the results table, creating a vector
+DE_foldchanges <- sig_res_ids$log2FoldChange
+names(DE_foldchanges) <- sig_res_ids$gene
+
+# Cnetplot details the genes associated with one or more terms
+## By default it gives top 5 significant terms (by padj)
+DE_foldchanges <- ifelse(DE_foldchanges > 2, 2, DE_foldchanges)
+DE_foldchanges <- ifelse(DE_foldchanges < -2, -2, DE_foldchanges)
+
+cnetplot(ego,
+         categorySize="pvalue",
+         showCategory = 5,
+         foldChange=DE_foldchanges,
+         vertex.label.font=6)
+```
+
+## Gene Set Enrichment Analysis (GSEA)
+
+```{r}
+# Remove NAs
+sig_res_ids$entrez <- as.character(sig_res_ids$entrez)
+res_entrez <- sig_res_ids %>%
+  dplyr::filter(entrez != "NA")
+
+# Remove Entrez duplicates
+res_entrez <- res_entrez[which(duplicated(res_entrez$entrez) == F), ]
+
+# Extract the fold changes
+l2f <- res_entrez$log2FoldChange
+
+# Name each fold change with the corresponding Entrez ID
+names(l2f) <- res_entrez$entrez
+
+# Sort fold changes in descending order
+l2f <- sort(l2f, decreasing = TRUE)
+head(l2f)
+```
+
+```{r}
+# GSEA using gene sets from KEGG pathways
+gseaKEGG <- gseKEGG(geneList = l2f, # ordered named vector of fold changes (entrez IDs are the associated names)
+                     organism = "hsa", 
+                     nPerm = 1000, # default number permutations
+                     minGSSize = 20, # minimum gene set size (# genes in a set)
+                     pvalueCutoff = 0.05,
+                     verbose = FALSE)
+
+# Extract the GSEA results
+gseaKEGG_results <- gseaKEGG@result
+
+# Save results to csv file
+view(gseaKEGG_results)
+write.csv(gseaKEGG_results, here("output/GSEA_KEGG_results.csv"), quote=F)
+
+# GSEA plot for a single enriched pathway
+## hsa04657: IL-17 signaling pathway
+gseaplot(gseaKEGG, geneSetID = 'hsa04657')
+
+# Output images for a single significant KEGG pathway
+detach("package:dplyr", unload=TRUE) # first unload dplyr to avoid conflicts
+pathview(gene.data = l2f,
+         pathway.id = "hsa04657",
+         species = "hsa",
+         limit = list(gene = 2, # value gives the max/min limit for fold changes
+                      cpd = 1))
+
+# Output image for all significant pathways
+kegg_plots <- function(x) {
+  pathview(gene.data = l2f, pathway.id = gseaKEGG_results$ID[x], species = "hsa", limit = list(gene = 2, cpd = 1))
+}
+purrr::map(1:length(gseaKEGG_results$ID), kegg_plots)
+```
+
+```{r}
+# GSEA using gene sets associated with BP Gene Ontology terms
+gseaGO <- gseGO(geneList = l2f, 
+                OrgDb = org.Hs.eg.db,
+                ont = "BP",
+                keyType = "ENTREZID",
+                minGSSize = 20,
+                pvalueCutoff = 0.05,
+                verbose = FALSE)
+?gseGO
+gseaGO_res <- as.data.frame(gseaGO) 
+gseaplot(gseaGO, geneSetID = 'GO:0006952')
+```
+
+```{r}
+# GMT file of gene sets
+library(GSEABase)
+
+# Load in GMT file of gene sets 
+# downloaded from the Broad Institute [website](http://software.broadinstitute.org/gsea/msigdb/collections.jsp) for MSigDB)
+
+c2 <- read.gmt(here("data", "c2.cp.v2023.1.Hs.entrez.gmt"))
+msig <- GSEA(l2f, TERM2GENE=c2, verbose=FALSE)
+msig_df <- data.frame(msig)
+msig_df
+```
+
+## Pathway topology
+
+```{r}
+# Signalling Pathway Impact Analysis (SPIA)
+
+# Set-up
+library(SPIA)
+
+# Significant genes is a vector of fold changes where the names are ENTREZ gene IDs
+# The background set is a vector of all the genes represented on the platform
+res_ids$entrez <- as.character(res_ids$entrez)
+
+background_entrez <- res_ids$log2FoldChange
+names(background_entrez) <- res_ids$entrez
+
+sig_entrez <- sig_res_ids$log2FoldChange
+names(sig_entrez) <- sig_res_ids$entrez
+
+# Remove NAs
+sig_entrez <- sig_entrez[!is.na(names(sig_entrez))]
+background_entrez <- background_entrez[!is.na(names(background_entrez))]
+
+# Run SPIA
+spia_result <- spia(de=sig_entrez, all=background_entrez, organism="hsa")
+
+?spia
+```
+
+
+
+
+
+
+
+
+
+
+
