@@ -13,3 +13,4 @@ output/KEGG/
 output/GO/
 output/*.png
 code/*.png
+code/*.html
